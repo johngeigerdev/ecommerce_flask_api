@@ -62,7 +62,7 @@ class Product(Base):
 class Order(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(primary_key = True, autoincrement=True)
-    order_date: Mapped[datetime] = mapped_column(db.DateTime, default=datetime.now(pytz.utc), nullable=False)
+    order_date: Mapped[datetime] = mapped_column(db.DateTime, default=datetime.now(pytz.timezone("US/Eastern")), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable = False)
 
     # One-to-Many relationship showing one user can have many orders
@@ -84,8 +84,8 @@ class ProductSchema(ma.SQLAlchemyAutoSchema):
 
 #Order Schema
 class OrderSchema(ma.SQLAlchemyAutoSchema): 
-    # class Meta:
-    #     model = Order
+    class Meta:
+        model = Order
     user_id = fields.Int(required=True)
     order_date = fields.DateTime(dump_only=True)
 
@@ -238,7 +238,7 @@ def create_order():
     return jsonify({
         "message": f"Order created successfully",
         "order_id": new_order.id,
-        "order_date": new_order.order_date.isoformat() if isinstance(new_order.order_date, datetime) else new_order.order_date
+        "order_date": new_order.order_date.strftime("%Y-%m-%d %H:%M:%S") if isinstance(new_order.order_date, datetime) else new_order.order_date
     })
 
 #GET orders
@@ -249,33 +249,48 @@ def get_orders():
     for order in orders:
         orders_list.append({
             'id': order.id,
-            'order_date': order.order_date.isoformat() if isinstance(order.order_date, datetime) else order.order_date
+            'order_date': order.order_date.strftime("%Y-%m-%d %H:%M:%S") if isinstance(order.order_date, datetime) else order.order_date
         })
     return jsonify(orders_list)
 
 # #GET a single order
-# @app.route('/product/<int:id>', methods = ['GET'])
-# def get_order(id):
-#     order = db.session.get(Order, id)
-#     return order_schema.jsonify(order), 200
+@app.route('/product/<int:id>', methods = ['GET'])
+def get_order(id):
+    order = db.session.get(Order, id)
+    return order_schema.jsonify(order), 200
+
+#ADD a product to an order (PUT)
+#GET /orders/<order_id>/add_product/<product_id>:
+@app.route('/orders/<int:order_id>/add_product/<int:product_id>', methods = ['PUT'])
+def add_product_to_order(order_id, product_id):
+    order = db.session.get(Order, order_id) 
+    product = db.session.get(Product, product_id)
+    if not order:
+        return jsonify({"message": "Invalid order id"}), 400
+    if not product:
+        return jsonify({"message": "Invalid product id"}), 400
+    order.products.append(product)
+    db.session.commit()
+    return jsonify({"message": f"Product {product.product_name} added to order {order.id}"}), 200
+
 
 # #UPDATE a order
-# @app.route('/order/<int:id>', methods = ['PUT'])
-# def update_order(id):
-#     order = db.session.get(Order, id)
-#     if not order:
-#         return jsonify({"message": "Invalid order id"})
-#     try:
-#         order_data = order_schema.load(request.json)
-#     except ValidationError as err:
-#         return jsonify(err.messages), 400
+@app.route('/order/<int:id>', methods = ['PUT'])
+def update_order(id):
+    order = db.session.get(Order, id)
+    if not order:
+        return jsonify({"message": "Invalid order id"})
+    try:
+        order_data = order_schema.load(request.json)
+    except ValidationError as err:
+        return jsonify(err.messages), 400
     
-#     order.product_name = order_data['order_name']
-#     order.price = order_data['price']
-#     db.session.commit()
-#     return order_schema.jsonify(order), 200
+    order.product_name = order_data['order_name']
+    order.price = order_data['price']
+    db.session.commit()
+    return order_schema.jsonify(order), 200
 
-# #Delete Product
+# #Delete Order
 # @app.route('/order/<int:id>', methods = ['DELETE'])
 # def delete_order(id):
 #     order = db.session.get(Order, id)
