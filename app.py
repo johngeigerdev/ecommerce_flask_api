@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, Table, Column, String, select, Float
-from marshmallow import ValidationError
+from marshmallow import ValidationError, Schema, fields
 from typing import List, Optional
 import uuid
 from datetime import datetime
@@ -62,7 +62,7 @@ class Product(Base):
 class Order(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(primary_key = True, autoincrement=True)
-    order_date: Mapped[datetime] = mapped_column(default=lambda: datetime.now(pytz.timezone('US/Eastern')), nullable = False)
+    order_date: Mapped[datetime] = mapped_column(db.DateTime, default=datetime.now(pytz.utc), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable = False)
 
     # One-to-Many relationship showing one user can have many orders
@@ -84,8 +84,10 @@ class ProductSchema(ma.SQLAlchemyAutoSchema):
 
 #Order Schema
 class OrderSchema(ma.SQLAlchemyAutoSchema): 
-    class Meta:
-        model = Order
+    # class Meta:
+    #     model = Order
+    user_id = fields.Int(required=True)
+    order_date = fields.DateTime(dump_only=True)
 
 #Initializing the Schemas
 user_schema = UserSchema()
@@ -222,25 +224,22 @@ def delete_product(id):
 
 #---------------ORDER Endpoints-----------------#
 #CREATE a new order
-# @app.route('/orders', methods=['POST'])
-# def create_order():
-#     user_id = request.json.get('user_id')
-#     order_data = request.json
-#     try:
-#         order_data = order_schema.load(order_data) 
-#     except ValidationError as err:
-#         return jsonify(err.messages), 400 
-    
-#     exists = db.session.query(Order).filter_by(id=order_data['order_id']).first() 
-#     if exists:
-#         return jsonify({"message": f"Order with id {order_data['order_id']} already exists"}), 400 
-#     else:
-#         new_order = Order(order_date=order_data['order_date'], user_id=user_id)
-#         db.session.add(new_order)
-#         db.session.commit()
-#         print(f"Order #{new_order.id} created")
+@app.route('/order', methods=['POST'])
+def create_order():
+    try:
+        order_data = order_schema.load(request.json) 
+    except ValidationError as err:
+        return jsonify(err.messages), 400
 
-#     return order_schema.jsonify(new_order), 201 
+    order_data = request.json
+    new_order = Order(user_id = order_data.get('user_id'))
+    db.session.add(new_order)
+    db.session.commit()
+    return jsonify({
+        "message": f"Order created successfully",
+        "order_id": new_order.id,
+        "order_date": new_order.order_date.isoformat() if isinstance(new_order.order_date, datetime) else new_order.order_date
+    })
 
 #GET orders
 @app.route('/orders', methods = ['GET'])
