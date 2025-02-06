@@ -336,21 +336,18 @@ def update_order(id):
     db.session.commit()
     return order_schema.jsonify(order), 200
 
-# #Delete Order
-# @app.route('/order/<int:id>', methods = ['DELETE'])
-# def delete_order(id):
-#     order = db.session.get(Order, id)
-#     if order:
-#         db.session.delete(order)
-#         db.session.commit()
-#         return jsonify({"message": f"order with id {id} deleted"}), 200
-#     else:
-#         return jsonify({"message": f"order with {id} not found"}), 400
-
-
-
-
-
+# #Delete Order  --> extra feature
+@app.route('/order/<int:id>', methods = ['DELETE'])
+def delete_order(id):
+    order = db.session.get(Order, id)
+    if order:
+        db.session.delete(order)
+        db.session.commit()
+        return jsonify({"message": f"order number {id} deleted"}), 200
+    else:
+        return jsonify({"message": f"order number {id} not found"}), 400
+    
+#Run the app
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
