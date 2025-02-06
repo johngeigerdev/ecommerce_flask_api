@@ -87,7 +87,7 @@ class OrderSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Order
     user_id = fields.Int(required=True)
-    order_date = fields.DateTime(dump_only=True)
+    order_date = fields.DateTime(dump_only=True) #dump_only means that the field is not required to be inputted but will be displayed in the output
 
 #Initializing the Schemas
 user_schema = UserSchema()
@@ -167,7 +167,7 @@ def delete_user(id):
 @app.route('/products', methods=['POST'])
 def create_product():
     try:
-        product_data = product_schema.load(request.json) 
+        product_data = product_schema.load(request.json) #this loads the incoming JSON data into a Product object
     except ValidationError as err:
         return jsonify(err.messages), 400 
     
@@ -186,7 +186,7 @@ def create_product():
 @app.route('/products', methods = ['GET'])
 def get_products():
     query = select(Product)
-    products = db.session.execute(query).scalars().all()
+    products = db.session.execute(query).scalars().all() #with the variable product, this will return all the products in the database
     return products_schema.jsonify(products), 200 
 
 #GET a single product
@@ -214,7 +214,7 @@ def update_product(id):
 #Delete Product
 @app.route('/product/<int:id>', methods = ['DELETE'])
 def delete_product(id):
-    product = db.session.get(Product, id)
+    product = db.session.get(Product, id) 
     if product:
         db.session.delete(product)
         db.session.commit()
@@ -260,7 +260,6 @@ def get_order(id):
     return order_schema.jsonify(order), 200
 
 #ADD a product to an order (PUT)
-#GET /orders/<order_id>/add_product/<product_id>:
 @app.route('/orders/<int:order_id>/add_product/<int:product_id>', methods = ['PUT'])
 def add_product_to_order(order_id, product_id):
     order = db.session.get(Order, order_id) 
@@ -269,12 +268,59 @@ def add_product_to_order(order_id, product_id):
         return jsonify({"message": "Invalid order id"}), 400
     if not product:
         return jsonify({"message": "Invalid product id"}), 400
-    order.products.append(product)
-    db.session.commit()
+    if product in order.products: #ensures that there are no duplicate items in the order
+        return jsonify({"message": f"{product.product_name} is already in the order"}), 400
+    else:
+        order.products.append(product)
+        db.session.commit()
     return jsonify({"message": f"Product {product.product_name} added to order {order.id}"}), 200
 
+#remove product from an order
+@app.route('/orders/<int:order_id>/remove_product/<int:product_id>', methods = ['PUT'])
+def remove_product(order_id, product_id):
+    order = db.session.get(Order, order_id)
+    product = db.session.get(Product, product_id)
+    if not order:
+        return jsonify({"message": "invalid product id"})
+    if not product:
+        return jsonify({"message": "invalid product id"})
+    order.products.remove(product)
+    db.session.commit()
+    return jsonify({"message": f"{product.product_name} has been removed from order {order.id}"}), 200
 
-# #UPDATE a order
+#get orders for a specified user
+@app.route('/orders/user/<user_id>', methods = ['GET'])
+def getuserOrders(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify ({"message": "invalid user id"})
+    else:
+        orders = db.session.query(Order).filter_by(user_id = user.id).all() #this queries the Order table for all orders with the specified user_id
+        orders_list = []
+        for order in orders: #this loops through each order in the orders table that matches ther given user_id and appends to orders_list[]
+            orders_list.append({
+                "id": order.id,
+                "order_date": order.order_date.strftime("%Y-%m-%d %H:%M:%S") if isinstance(order.order_date, datetime) else order.order_date                                   
+            })
+        return jsonify({"orders": orders_list}), 200
+    
+#get all products in an order
+@app.route('/orders/<int:order_id>/products')
+def get_order_products(order_id):
+    order = db.session.get(Order, order_id)
+    if not order:
+        return jsonify({"message": "invalid order id"})
+    else:
+        products_list = []
+        for product in order.products: #order.products is a list of products in the order, this is specified in the many-to-many relationship in the Order model 
+            products_list.append({
+                "name": product.product_name, #product_name is a column in the Product model
+                "id": product.id #id is a column in the Product model
+            })
+        return jsonify({"products:": products_list}), 200
+
+
+#UPDATE a order
 @app.route('/order/<int:id>', methods = ['PUT'])
 def update_order(id):
     order = db.session.get(Order, id)
